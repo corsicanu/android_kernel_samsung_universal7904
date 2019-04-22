@@ -126,6 +126,8 @@ static int displayport_full_link_training(void)
 	u8 enhanced_frame_cap;
 	int ret = 0;
 
+	//dipshit
+	long dipshit = (training_aux_rd_interval*4000)+400;
 	displayport_info("Full Link Training start +\n");
 
 	for (i = 0; i < DPCD_BUF_SIZE; i++)
@@ -315,7 +317,7 @@ EQ_Training_Retry:
 	lane_symbol_locked_done = 0;
 	interlane_align_done = 0;
 
-	udelay((training_aux_rd_interval*4000)+400);
+	usleep_range(dipshit, dipshit+100);
 
 	displayport_reg_dpcd_read_burst(DPCD_ADD_LANE0_1_STATUS, 3, val);
 	lane_cr_done |= ((val[0] & LANE0_CR_DONE) >> 0);
