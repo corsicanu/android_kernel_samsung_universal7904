@@ -744,10 +744,10 @@ static inline enum legacy_ipc_map get_mmap_idx(enum sipc_ch_id ch,
 	if (sipc5_fmt_ch(ch))
 		return IPC_MAP_FMT;
 #ifdef CONFIG_MODEM_IF_LEGACY_QOS
-		return (skb->queue_mapping == 1) ?
-			IPC_MAP_HPRIO_RAW : IPC_MAP_NORM_RAW;
+	return (skb->queue_mapping == 1) ?
+		IPC_MAP_HPRIO_RAW : IPC_MAP_NORM_RAW;
 #else
-		return IPC_MAP_NORM_RAW;
+	return IPC_MAP_NORM_RAW;
 #endif
 }
 
