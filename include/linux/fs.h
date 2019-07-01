@@ -20,7 +20,6 @@
 #include <linux/rwsem.h>
 #include <linux/capability.h>
 #include <linux/semaphore.h>
-#include <linux/fcntl.h>
 #include <linux/fiemap.h>
 #include <linux/rculist_bl.h>
 #include <linux/atomic.h>
@@ -154,9 +153,6 @@ typedef void (dax_iodone_t)(struct buffer_head *bh_map, int uptodate);
 
 /* File was opened by fanotify and shouldn't generate fanotify events */
 #define FMODE_NONOTIFY		((__force fmode_t)0x4000000)
-
-/* File is capable of returning -EAGAIN if I/O will block */
-#define FMODE_NOWAIT		((__force fmode_t)0x8000000)
 
 /*
  * Flag for rw_copy_check_uvector and compat_rw_copy_check_uvector
@@ -334,22 +330,9 @@ struct page;
 struct address_space;
 struct writeback_control;
 
-/*
- * Write life time hint values.
- */
-enum rw_hint {
-	WRITE_LIFE_NOT_SET	= 0,
-	WRITE_LIFE_NONE		= RWH_WRITE_LIFE_NONE,
-	WRITE_LIFE_SHORT	= RWH_WRITE_LIFE_SHORT,
-	WRITE_LIFE_MEDIUM	= RWH_WRITE_LIFE_MEDIUM,
-	WRITE_LIFE_LONG		= RWH_WRITE_LIFE_LONG,
-	WRITE_LIFE_EXTREME	= RWH_WRITE_LIFE_EXTREME,
-};
-
 #define IOCB_EVENTFD		(1 << 0)
 #define IOCB_APPEND		(1 << 1)
 #define IOCB_DIRECT		(1 << 2)
-#define IOCB_NOWAIT		(1 << 7)
 
 struct kiocb {
 	struct file		*ki_filp;
@@ -357,7 +340,6 @@ struct kiocb {
 	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
 	void			*private;
 	int			ki_flags;
-	enum rw_hint		ki_hint;
 };
 
 static inline bool is_sync_kiocb(struct kiocb *kiocb)
@@ -457,7 +439,7 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
 				loff_t pos, unsigned len, unsigned copied,
 				struct page *page, void *fsdata);
 
-#define MAX_KEY_SIZE	64
+#define KEY_MAX_SIZE	64
 struct address_space {
 	struct inode		*host;		/* owner: inode, block_device */
 	struct radix_tree_root	page_tree;	/* radix tree of all pages */
@@ -474,16 +456,18 @@ struct address_space {
 	spinlock_t		private_lock;	/* for use by the address_space */
 	struct list_head	private_list;	/* ditto */
 	void			*private_data;	/* ditto */
-	unsigned char		*iv;		/* initial vector */
-	unsigned char		key[MAX_KEY_SIZE];	/* key */
-	unsigned long		key_length;	/* key length */
-	int			private_enc_mode;	/* Encryption mode */
-	int 			private_algo_mode;	/* Encryption algorithm */
-	pgoff_t			sensitive_data_index;	/* data starts here */
-	struct crypto_hash	*hash_tfm;	/* hash transform */
+	unsigned char           *iv;            /* iv */
+	unsigned char           key[KEY_MAX_SIZE];	/* key */
+	unsigned long           key_length;     /* key length */
+	char                    *alg;           /* algorithm */
+	pgoff_t                 sensitive_data_index;   /* data starts here */
+	struct crypto_hash      *hash_tfm;      /* hash transform */
 #ifdef CONFIG_CRYPTO_FIPS
-	bool			cc_enable;	/* cc flag */
+	bool                    cc_enable;      /* cc flag */
 #endif
+	int			private_enc_mode;	/* private enc mode */
+	int			private_algo_mode;	/* private algo mode */
+	bool                    plain_text;     /* plain_text flag */
 #ifdef CONFIG_SDP
 	int userid;
 #endif
@@ -670,7 +654,6 @@ struct inode {
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned short          i_bytes;
 	unsigned int		i_blkbits;
-	enum rw_hint		i_write_hint;
 	blkcnt_t		i_blocks;
 
 #ifdef __NEED_I_SIZE_ORDERED
@@ -955,10 +938,6 @@ struct file {
 	struct list_head	f_tfile_llink;
 #endif /* #ifdef CONFIG_EPOLL */
 	struct address_space	*f_mapping;
-
-#if defined(CONFIG_FIVE_PA_FEATURE) || defined(CONFIG_PROCA)
-	void *f_signature;
-#endif
 } __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */
 
 struct file_handle {
@@ -1109,6 +1088,8 @@ struct file_lock_context {
 #define OFFSET_MAX	INT_LIMIT(loff_t)
 #define OFFT_OFFSET_MAX	INT_LIMIT(off_t)
 #endif
+
+#include <linux/fcntl.h>
 
 extern void send_sigio(struct fown_struct *fown, int fd, int band);
 
@@ -1736,9 +1717,6 @@ struct file_operations {
 	unsigned (*mmap_capabilities)(struct file *);
 #endif
 	struct file* (*get_lower_file)(struct file *f);
-#ifdef CONFIG_EXT4CRYPT_SDP
-	int (*check_sdp_info) (struct file *file);
-#endif
 };
 
 struct inode_operations {
@@ -1815,7 +1793,7 @@ struct super_operations {
 	void (*umount_begin) (struct super_block *);
 
 	int (*show_options)(struct seq_file *, struct dentry *);
-	int (*show_options2)(struct vfsmount *,struct seq_file *, struct dentry *);
+	int (*show_options2)(struct vfsmount *, struct seq_file *, struct dentry *);
 	int (*show_devname)(struct seq_file *, struct dentry *);
 	int (*show_path)(struct seq_file *, struct dentry *);
 	int (*show_stats)(struct seq_file *, struct dentry *);
@@ -3161,13 +3139,7 @@ static inline bool dir_relax(struct inode *inode)
 extern bool path_noexec(const struct path *path);
 extern void inode_nohighmem(struct inode *inode);
 
-/* for Android O */
-#define AID_USE_SEC_RESERVED	KGIDT_INIT(4444)
-#if ANDROID_VERSION < 90000
-#define AID_USE_ROOT_RESERVED	KGIDT_INIT(5555)
-#else
-/* for Android P */
-#define AID_USE_ROOT_RESERVED	KGIDT_INIT(5678)
-#endif
+int vfs_ioc_setflags_prepare(struct inode *inode, unsigned int oldflags,
+			     unsigned int flags);
 
 #endif /* _LINUX_FS_H */
