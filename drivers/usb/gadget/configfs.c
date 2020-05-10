@@ -390,11 +390,8 @@ static ssize_t gadget_dev_desc_UDC_store(struct config_item *item,
 	struct usb_function *f, *tmp;
 #endif
 
-	/* HACK: ffs_ep0_write must be called before UDC store in adb,
-	 * but sometimes UDC store was executed before ffs_ep0_write.
-	 * Delay was added to avoid the problem
-	 */
-	pr_info("%s: +++\n", __func__);
+	if (strlen(page) < len)
+		return -EOVERFLOW;
 
 	name = kstrdup(page, GFP_KERNEL);
 	if (!name)
