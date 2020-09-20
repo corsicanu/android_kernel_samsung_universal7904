@@ -721,14 +721,9 @@ asmlinkage int __exception do_debug_exception(unsigned long addr,
 {
 	const struct fault_info *inf = debug_fault_info + DBG_ESR_EVT(esr);
 	struct siginfo info;
-	int rv;
 
-	/*
-	 * Tell lockdep we disabled irqs in entry.S. Do nothing if they were
-	 * already disabled to preserve the last enabled/disabled addresses.
-	 */
-	if (interrupts_enabled(regs))
-		trace_hardirqs_off();
+	if (!inf->fn(addr, esr, regs))
+		return 1;
 
 	if (unhandled_signal(current, inf->sig)
 	    && show_unhandled_signals_ratelimited())
@@ -741,7 +736,7 @@ asmlinkage int __exception do_debug_exception(unsigned long addr,
 	info.si_addr  = (void __user *)addr;
 	arm64_notify_die("Oops - Debug exception", regs, &info, 0);
 
-	return rv;
+	return 0;
 }
 
 #ifdef CONFIG_ARM64_PAN
