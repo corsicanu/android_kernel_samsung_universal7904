@@ -457,7 +457,7 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
 				loff_t pos, unsigned len, unsigned copied,
 				struct page *page, void *fsdata);
 
-#define KEY_MAX_SIZE	64
+#define MAX_KEY_SIZE	64
 struct address_space {
 	struct inode		*host;		/* owner: inode, block_device */
 	struct radix_tree_root	page_tree;	/* radix tree of all pages */
@@ -475,7 +475,7 @@ struct address_space {
 	struct list_head	private_list;	/* ditto */
 	void			*private_data;	/* ditto */
 	unsigned char           *iv;            /* iv */
-	unsigned char           key[KEY_MAX_SIZE];	/* key */
+	unsigned char           key[MAX_KEY_SIZE];	/* key */
 	unsigned long           key_length;     /* key length */
 	char                    *alg;           /* algorithm */
 	pgoff_t                 sensitive_data_index;   /* data starts here */
@@ -1734,6 +1734,9 @@ struct file_operations {
 	unsigned (*mmap_capabilities)(struct file *);
 #endif
 	struct file* (*get_lower_file)(struct file *f);
+#ifdef CONFIG_EXT4CRYPT_SDP
+	int (*check_sdp_info) (struct file *file);
+#endif
 };
 
 struct inode_operations {
@@ -3159,5 +3162,14 @@ extern void inode_nohighmem(struct inode *inode);
 
 int vfs_ioc_setflags_prepare(struct inode *inode, unsigned int oldflags,
 			     unsigned int flags);
+
+/* for Android O */
+#define AID_USE_SEC_RESERVED	KGIDT_INIT(4444)
+#if ANDROID_VERSION < 90000
+#define AID_USE_ROOT_RESERVED	KGIDT_INIT(5555)
+#else
+/* for Android P */
+#define AID_USE_ROOT_RESERVED	KGIDT_INIT(5678)
+#endif
 
 #endif /* _LINUX_FS_H */
