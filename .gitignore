@@ -116,3 +116,7 @@ all.config
 # fetched Android config fragments
 android/configs/android-*.cfg
 linux-upstream.sh
+# build leftovers
+arch/arm64/boot/dts/exynos/dtbo/exynos7904-a40_eur_open_00.dtbo
+arch/arm64/boot/dts/exynos/dtbo/exynos7904-a40_eur_open_01.dtbo
+firmware/five/ffffffff000000000000000000000072.tlbin
